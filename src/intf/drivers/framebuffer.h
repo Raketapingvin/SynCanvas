@@ -17,5 +17,3 @@ uint32_t framebuffer_get_pixel(uint32_t x, uint32_t y);
 void framebuffer_clear(uint32_t color);
 void framebuffer_draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color);
 void framebuffer_draw_cursor(uint32_t x, uint32_t y);
-void framebuffer_swap(void);
-void framebuffer_blit_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h);

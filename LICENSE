@@ -1,21 +1,27 @@
-Copyright (c) 2026 Rakétapingvin GitHub username: Raketapingvin
+Copyright (c) 2026 Rakétapingvin
+GitHub username: Raketapingvin
 
 All rights reserved.
 
-Permission is granted to view, use, and modify this software for private, non-commercial purposes only.
+Permission is granted to view, use, and modify this software 
+for private, non-commercial purposes only.
 
 You may NOT:
-- Distribute, sublicense, or sell this software
-- Publish modified versions
-- Create derivative works for public release
-- Use this software for commercial purposes
-- Redistribute the source code or compiled versions
+  - Distribute, sublicense, or sell this software
+  - Publish modified versions of the original source code
+  - Create derivative works for public release based on the original source code
+  - Use this software for commercial purposes
+  - Redistribute the original source code or compiled versions
 
-Private modifications are allowed strictly for personal use and must not be shared.
+Private modifications (changes to the original source) are allowed
+strictly for personal use.
 
-Plugin / addon development is permitted only if:
-- The addon is developed independently
-- No source code from this project is copied or included
-- The addon does not function as a replacement or fork of the original software
+Mods / addons:
+  - May be published publicly ONLY if it clearly states:
+      * Which software it is for
+      * Whose code it is based on
+  - Must NOT include or redistribute any modified source code
+    of the original software.
 
-This software is provided "as is", without warranty of any kind.
+This software is provided "as is", without warranty of any kind,
+to the maximum extent permitted by law.

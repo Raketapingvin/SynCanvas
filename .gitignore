@@ -1,0 +1,15 @@
+# Build artifacts
+build/
+dist/
+targets/x86_64/iso/boot/kernel.bin
+
+# Binary files
+*.o
+*.bin
+*.iso
+
+# Temporary files
+123
+*.swp
+*.swo
+*~

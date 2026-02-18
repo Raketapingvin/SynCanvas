@@ -32,9 +32,26 @@
 #define APP_HOME 0
 #define APP_NOTE 1
 
-// Colors
-#define COL_SIDEBAR 0xFFDDDDDD // Light Grey
-#define COL_BG      0xFFFFFFFF // White
-#define COL_TEXT    0xFF000000 // Black
-#define COL_ICON    0xFF000000 // Black
-#define COL_SELECT  0xFFAAAAAA // Darker Grey
+// Theme system
+#define THEME_DEFAULT 0
+#define THEME_GREEN   1
+#define THEME_ORANGE  2
+#define THEME_YELLOW  3
+#define THEME_BLUE    4
+
+// Current theme (global variable, defined in main.c)
+extern int current_theme;
+
+// Theme-aware color getters
+uint32_t get_col_sidebar(void);
+uint32_t get_col_bg(void);
+uint32_t get_col_text(void);
+uint32_t get_col_icon(void);
+uint32_t get_col_select(void);
+
+// Legacy color definitions (for backwards compatibility)
+#define COL_SIDEBAR get_col_sidebar()
+#define COL_BG      get_col_bg()
+#define COL_TEXT    get_col_text()
+#define COL_ICON    get_col_icon()
+#define COL_SELECT  get_col_select()

@@ -356,4 +356,163 @@ Date:   Wed Feb 18 20:24:57 2026 +0100
 [32m+[m[32m                    if (reply[28] == ip0 && reply[29] == ip1 &&[m
 [32m+[m[32m                        reply[30] == ip2 && reply[31] == ip3) {[m
 [32m+[m[32m                        return 1; // Success! Got ARP reply[m
+[32m+[m[32m                    }[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        // Small delay before checking again[m
+[32m+[m[32m        asm volatile("hlt");[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    return 0; // Timeout, no reply[m
+[32m+[m[32m}[m
+[1mdiff --git a/src/impl/kernel/main.c b/src/impl/kernel/main.c[m
+[1mindex 91e8c68..5a5f555 100644[m
+[1m--- a/src/impl/kernel/main.c[m
+[1m+++ b/src/impl/kernel/main.c[m
+[36m@@ -21,6 +21,7 @@[m
+ [m
+ // --- GUI STATE ---[m
+ int current_app = APP_HOME;[m
+[32m+[m[32m<<<<<<< Updated upstream[m
+ // Increased buffer size to 64KB for "no limit" feel[m
+ char notepad_buffer[65536]; [m
+ int notepad_cursor = 0;[m
+[36m@@ -169,6 +170,132 @@[m [mvoid delete_char_back() {[m
+         notepad_cursor--;[m
+     }[m
+ }[m
+[32m+[m[32m=======[m
+[32m+[m[32mbool request_redraw = true;[m
+[32m+[m
+[32m+[m[32m// --- NOTEPAD STATE ---[m
+[32m+[m[32m#define NOTE_BUF_SIZE 65536[m
+[32m+[m[32mchar notepad_buffer[NOTE_BUF_SIZE];[m
+[32m+[m[32mint note_len = 0;           // total chars in buffer[m
+[32m+[m[32mint note_pos = 0;           // cursor position (insertion point)[m
+[32m+[m[32mint note_sel = -1;          // selection anchor (-1 = no selection)[m
+[32m+[m[32mint note_scroll_y = 0;      // scroll offset in lines[m
+[32m+[m[32mint note_total_lines = 1;   // cached total line count[m
+[32m+[m[32mint note_visible_lines = 1; // cached visible line count[m
+[32m+[m[32mbool note_sb_dragging = false; // scrollbar thumb dragging[m
+[32m+[m[32mint note_sb_drag_offset = 0;   // offset within thumb when drag started[m
+[32m+[m[32mchar note_clipboard[NOTE_BUF_SIZE];[m
+[32m+[m[32mint note_clip_len = 0;[m
+[32m+[m
+[32m+[m[32m// Helper: get selection range (ordered)[m
+[32m+[m[32mstatic void note_get_sel(int* start, int* end) {[m
+[32m+[m[32m    if (note_sel < 0) { *start = *end = note_pos; return; }[m
+[32m+[m[32m    if (note_sel < note_pos) { *start = note_sel; *end = note_pos; }[m
+[32m+[m[32m    else { *start = note_pos; *end = note_sel; }[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// Delete range [start, end) from buffer[m
+[32m+[m[32mstatic void note_delete_range(int start, int end) {[m
+[32m+[m[32m    if (start >= end) return;[m
+[32m+[m[32m    int rem = end - start;[m
+[32m+[m[32m    for (int i = end; i <= note_len; i++) notepad_buffer[i - rem] = notepad_buffer[i];[m
+[32m+[m[32m    note_len -= rem;[m
+[32m+[m[32m    note_pos = start;[m
+[32m+[m[32m    note_sel = -1;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// Insert string at note_pos[m
+[32m+[m[32mstatic void note_insert(const char* s, int slen) {[m
+[32m+[m[32m    if (note_len + slen >= NOTE_BUF_SIZE - 1) slen = NOTE_BUF_SIZE - 1 - note_len;[m
+[32m+[m[32m    if (slen <= 0) return;[m
+[32m+[m[32m    // Shift right[m
+[32m+[m[32m    for (int i = note_len; i >= note_pos; i--) notepad_buffer[i + slen] = notepad_buffer[i];[m
+[32m+[m[32m    for (int i = 0; i < slen; i++) notepad_buffer[note_pos + i] = s[i];[m
+[32m+[m[32m    note_len += slen;[m
+[32m+[m[32m    note_pos += slen;[m
+[32m+[m[32m    note_sel = -1;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// Is char a word boundary?[m
+[32m+[m[32mstatic int is_word_char(char c) {[m
+[32m+[m[32m    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// Move left by one word[m
+[32m+[m[32mstatic int word_left(int pos) {[m
+[32m+[m[32m    if (pos <= 0) return 0;[m
+[32m+[m[32m    pos--;[m
+[32m+[m[32m    while (pos > 0 && !is_word_char(notepad_buffer[pos])) pos--;[m
+[32m+[m[32m    while (pos > 0 && is_word_char(notepad_buffer[pos - 1])) pos--;[m
+[32m+[m[32m    return pos;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// Move right by one word[m
+[32m+[m[32mstatic int word_right(int pos) {[m
+[32m+[m[32m    if (pos >= note_len) return note_len;[m
+[32m+[m[32m    while (pos < note_len && !is_word_char(notepad_buffer[pos])) pos++;[m
+[32m+[m[32m    while (pos < note_len && is_word_char(notepad_buffer[pos])) pos++;[m
+[32m+[m[32m    return pos;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// Convert buffer position to line number[m
+[32m+[m[32mstatic int note_pos_to_line(int pos, int chars_per_line) {[m
+[32m+[m[32m    if (chars_per_line < 1) chars_per_line = 1;[m
+[32m+[m[32m    int line = 0;[m
+[32m+[m[32m    int col = 0;[m
+[32m+[m[32m    for (int i = 0; i < pos && i < note_len; i++) {[m
+[32m+[m[32m        if (notepad_buffer[i] == '\n') { line++; col = 0; }[m
+[32m+[m[32m        else { col++; if (col >= chars_per_line) { line++; col = 0; } }[m
+[32m+[m[32m    }[m
+[32m+[m[32m    return line;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m// --- SETTINGS STATE ---[m
+[32m+[m[32mint setting_clock_24h = 1;      // 0 = 12h, 1 = 24h[m
+[32m+[m[32mint setting_theme = 0;          // 0 = Light, 1 = Dark, 2 = Blue, 3 = Green, 4 = Orange, 5 = Yellow[m
+[32m+[m[32mint setting_show_seconds = 0;   // 0 = off, 1 = on[m
+[32m+[m[32mint setting_show_date = 1;      // 0 = off, 1 = on[m
+[32m+[m[32mint settings_category = 0;      // 0=General, 1=Appearance, 2=Clock, 3=Network, 4=About[m
+[32m+[m[32mint setting_timezone = 0;       // offset in hours from UTC (-12 to +14), stored as index into tz table[m
+[32m+[m[32mint net_test_running = 0;       // 0=idle, 1=testing, 2=passed, 3=failed[m
+[32m+[m[32mint setting_mouse_speed = 1;    // 0=Slow, 1=Normal, 2=Fast[m
+[32m+[m[32mint setting_cursor_blink = 1;   // 0=off, 1=on[m
+[32m+[m[32mint setting_word_wrap = 1;      // 0=off, 1=on[m
+[32m+[m[32mint setting_line_numbers = 0;   // 0=off, 1=on[m
+[32m+[m[32mint setting_tab_size = 4;       // 2 or 4[m
+[32m+[m
+[32m+[m[32m// Timezone offsets (hours from UTC)[m
+[32m+[m[32mstatic const int tz_offsets[] = { -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 };[m
+[32m+[m[32mstatic const char* tz_labels[] = {[m
+[32m+[m[32m    "UTC-12", "UTC-11", "UTC-10", "UTC-9", "UTC-8", "UTC-7", "UTC-6", "UTC-5",[m
+[32m+[m[32m    "UTC-4", "UTC-3", "UTC-2", "UTC-1", "UTC+0", "UTC+1", "UTC+2", "UTC+3",[m
+[32m+[m[32m    "UTC+4", "UTC+5", "UTC+6", "UTC+7", "UTC+8", "UTC+9", "UTC+10", "UTC+11",[m
+[32m+[m[32m    "UTC+12", "UTC+13", "UTC+14"[m
+[32m+[m[32m};[m
+[32m+[m[32m#define TZ_COUNT 27[m
+[32m+[m[32m#define TZ_DEFAULT 12  // UTC+0[m
+[32m+[m
+[32m+[m[32m// Theme color sets: {bg, text, sidebar, select}[m
+[32m+[m[32mstatic uint32_t themes[][4] = {[m
+[32m+[m[32m    {0xFFFFFFFF, 0xFF000000, 0xFFDDDDDD, 0xFFAAAAAA}, // Light[m
+[32m+[m[32m    {0xFF1E1E1E, 0xFFE0E0E0, 0xFF2D2D2D, 0xFF444444}, // Dark[m[41m [m
+[32m+[m[32m    {0xFFE8F0FE, 0xFF1A237E, 0xFFBBDEFB, 0xFF90CAF9}, // Blue[m
+[32m+[m[32m    {0xFFE8F5E9, 0xFF1B5E20, 0xFFC8E6C9, 0xFFA5D6A7}, // Green[m
+[32m+[m[32m    {0xFFFFF3E0, 0xFFBF360C, 0xFFFFE0B2, 0xFFFFCC80}, // Orange[m
+[32m+[m[32m    {0xFFFFFDE7, 0xFFF57F17, 0xFFFFF9C4, 0xFFFFF176}, // Yellow[m
+[32m+[m[32m};[m
+[32m+[m[32m#define THEME_COUNT 6[m
+[32m+[m[32mstatic const char* theme_names[] = { "Light", "Dark", "Blue", "Green", "Orange", "Yellow" };[m
+[32m+[m
+[32m+[m[32mstatic uint32_t get_bg(void)      { return themes[setting_theme][0]; }[m
+[32m+[m[32mstatic uint32_t get_text(void)    { return themes[setting_theme][1]; }[m
+[32m+[m[32mstatic uint32_t get_sidebar(void) { return themes[setting_theme][2]; }[m
+[32m+[m[32mstatic uint32_t get_select(void)  { return themes[setting_theme][3]; }[m
+[32m+[m
+[32m+[m[32m// Cursor dimensions must match framebuffer_draw_cursor[m
+[32m+[m[32m#define CURSOR_W 12[m
+[32m+[m[32m#define CURSOR_H 16[m
+[32m+[m[32m>>>>>>> Stashed changes[m
+ [m
+ // --- HELPERS ---[m
+ [m
+[36m@@ -177,18 +304,17 @@[m [mvoid print_2digits(int val, int x, int y, int scale) {[m
+     buf[0] = '0' + (val / 10);[m
+     buf[1] = '0' + (val % 10);[m
+     buf[2] = 0;[m
 [

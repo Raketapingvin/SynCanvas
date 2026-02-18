@@ -113,12 +113,13 @@ void framebuffer_blit_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
     if (x + w > fb.width) w = fb.width - x;
     if (y + h > fb.height) h = fb.height - y;
 
-    // Copy only the specified rectangle from back buffer to video memory
+    // Copy rectangle from back buffer to video memory using 64-bit writes
     for (uint32_t row = y; row < y + h; row++) {
-        uint32_t* dst = (uint32_t*)((uint8_t*)fb.base_address + row * fb.pitch + x * 4);
-        uint32_t* src = (uint32_t*)(back_buffer + row * fb.pitch + x * 4);
-        for (uint32_t col = 0; col < w; col++) {
-            dst[col] = src[col];
+        uint64_t* dst = (uint64_t*)((uint8_t*)fb.base_address + row * fb.pitch + (x & ~1) * 4);
+        uint64_t* src = (uint64_t*)(back_buffer + row * fb.pitch + (x & ~1) * 4);
+        uint32_t qwords = ((w + (x & 1) + 1) / 2);
+        for (uint32_t i = 0; i < qwords; i++) {
+            dst[i] = src[i];
         }
     }
 }
@@ -126,20 +127,32 @@ void framebuffer_blit_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
 void framebuffer_clear(uint32_t color) {
     if (fb.base_address == 0) return;
     
-    // Naive clear
     for (uint32_t y = 0; y < fb.height; y++) {
+        uint32_t* row = (uint32_t*)(back_buffer + y * fb.pitch);
         for (uint32_t x = 0; x < fb.width; x++) {
-            framebuffer_put_pixel(x, y, color);
+            row[x] = color;
         }
     }
+    dirty_mark(0, 0);
+    dirty_mark(fb.width - 1, fb.height - 1);
 }
 
 void framebuffer_draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
-    for (uint32_t i = 0; i < h; i++) {
-        for (uint32_t j = 0; j < w; j++) {
-            framebuffer_put_pixel(x + j, y + i, color);
+    if (fb.base_address == 0 || w == 0 || h == 0) return;
+
+    // Clamp to screen bounds
+    if (x >= fb.width || y >= fb.height) return;
+    if (x + w > fb.width) w = fb.width - x;
+    if (y + h > fb.height) h = fb.height - y;
+
+    for (uint32_t row = 0; row < h; row++) {
+        uint32_t* dst = (uint32_t*)(back_buffer + (y + row) * fb.pitch + x * 4);
+        for (uint32_t col = 0; col < w; col++) {
+            dst[col] = color;
         }
     }
+    dirty_mark(x, y);
+    dirty_mark(x + w - 1, y + h - 1);
 }
 
 void framebuffer_draw_cursor(uint32_t x, uint32_t y) {

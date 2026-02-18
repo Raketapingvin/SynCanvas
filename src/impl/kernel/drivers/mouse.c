@@ -38,10 +38,22 @@ uint8_t mouse_read_ack() {
     return inb(MOUSE_PORT_DATA);
 }
 
+// Mouse speed: 0=slow(0.5x), 1=normal(1x), 2=fast(2x)
+volatile int mouse_speed_setting = 1;
+
 static void mouse_process_packet() {
     uint8_t flags = mouse_byte[0];
-    int8_t x_rel = (int8_t) mouse_byte[1];
-    int8_t y_rel = (int8_t) mouse_byte[2];
+    int32_t x_rel = (int8_t) mouse_byte[1];
+    int32_t y_rel = (int8_t) mouse_byte[2];
+
+    // Apply speed multiplier
+    if (mouse_speed_setting == 0) {
+        x_rel = x_rel / 2;
+        y_rel = y_rel / 2;
+    } else if (mouse_speed_setting == 2) {
+        x_rel = x_rel * 2;
+        y_rel = y_rel * 2;
+    }
 
     mouse_state.x += x_rel;
     mouse_state.y -= y_rel;

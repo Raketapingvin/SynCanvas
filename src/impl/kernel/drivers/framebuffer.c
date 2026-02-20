@@ -2,6 +2,28 @@
 
 struct Framebuffer fb = {0};
 
+// Back buffer and dirty-rect tracking
+static uint8_t* back_buffer = 0;
+static int dirty = 0;
+static uint32_t dirty_x1, dirty_y1, dirty_x2, dirty_y2;
+
+static void dirty_mark(uint32_t x, uint32_t y) {
+    if (!dirty) {
+        dirty = 1;
+        dirty_x1 = dirty_x2 = x;
+        dirty_y1 = dirty_y2 = y;
+    } else {
+        if (x < dirty_x1) dirty_x1 = x;
+        if (x > dirty_x2) dirty_x2 = x;
+        if (y < dirty_y1) dirty_y1 = y;
+        if (y > dirty_y2) dirty_y2 = y;
+    }
+}
+
+static void dirty_reset(void) {
+    dirty = 0;
+}
+
 struct multiboot_tag {
     uint32_t type;
     uint32_t size;
@@ -34,6 +56,7 @@ void framebuffer_init(void* mboot_addr) {
              fb.pitch = fb_tag->pitch;
              fb.bpp = fb_tag->bpp;
              fb.buffer_size = fb.pitch * fb.height;
+             back_buffer = (uint8_t*)fb.base_address;
              return;
         }
         
@@ -58,23 +81,75 @@ uint32_t framebuffer_get_pixel(uint32_t x, uint32_t y) {
     return *pixel;
 }
 
-void framebuffer_clear(uint32_t color) {
+void framebuffer_swap(void) {
+    if (fb.base_address == 0 || fb.buffer_size == 0 || !dirty) return;
+
+    // Only copy the dirty rectangle to VRAM
+    uint32_t x = dirty_x1;
+    uint32_t y = dirty_y1;
+    uint32_t w = dirty_x2 - dirty_x1 + 1;
+    uint32_t h = dirty_y2 - dirty_y1 + 1;
+
+    for (uint32_t row = y; row < y + h; row++) {
+        uint64_t* dst = (uint64_t*)((uint8_t*)fb.base_address + row * fb.pitch + (x & ~1) * 4);
+        uint64_t* src = (uint64_t*)(back_buffer + row * fb.pitch + (x & ~1) * 4);
+        uint32_t qwords = ((w + (x & 1) + 1) / 2);
+        for (uint32_t i = 0; i < qwords; i++) {
+            dst[i] = src[i];
+        }
+    }
+
+    dirty_reset();
+}
+
+void framebuffer_blit_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h) {
     if (fb.base_address == 0) return;
-    
-    // Naive clear
-    for (uint32_t y = 0; y < fb.height; y++) {
-        for (uint32_t x = 0; x < fb.width; x++) {
-            framebuffer_put_pixel(x, y, color);
+
+    // Clamp to screen bounds
+    if (x >= fb.width || y >= fb.height) return;
+    if (x + w > fb.width) w = fb.width - x;
+    if (y + h > fb.height) h = fb.height - y;
+
+    // Copy rectangle from back buffer to video memory using 64-bit writes
+    for (uint32_t row = y; row < y + h; row++) {
+        uint64_t* dst = (uint64_t*)((uint8_t*)fb.base_address + row * fb.pitch + (x & ~1) * 4);
+        uint64_t* src = (uint64_t*)(back_buffer + row * fb.pitch + (x & ~1) * 4);
+        uint32_t qwords = ((w + (x & 1) + 1) / 2);
+        for (uint32_t i = 0; i < qwords; i++) {
+            dst[i] = src[i];
         }
     }
 }
 
-void framebuffer_draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
-    for (uint32_t i = 0; i < h; i++) {
-        for (uint32_t j = 0; j < w; j++) {
-            framebuffer_put_pixel(x + j, y + i, color);
+void framebuffer_clear(uint32_t color) {
+    if (fb.base_address == 0) return;
+    
+    for (uint32_t y = 0; y < fb.height; y++) {
+        uint32_t* row = (uint32_t*)(back_buffer + y * fb.pitch);
+        for (uint32_t x = 0; x < fb.width; x++) {
+            row[x] = color;
         }
     }
+    dirty_mark(0, 0);
+    dirty_mark(fb.width - 1, fb.height - 1);
+}
+
+void framebuffer_draw_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
+    if (fb.base_address == 0 || w == 0 || h == 0) return;
+
+    // Clamp to screen bounds
+    if (x >= fb.width || y >= fb.height) return;
+    if (x + w > fb.width) w = fb.width - x;
+    if (y + h > fb.height) h = fb.height - y;
+
+    for (uint32_t row = 0; row < h; row++) {
+        uint32_t* dst = (uint32_t*)(back_buffer + (y + row) * fb.pitch + x * 4);
+        for (uint32_t col = 0; col < w; col++) {
+            dst[col] = color;
+        }
+    }
+    dirty_mark(x, y);
+    dirty_mark(x + w - 1, y + h - 1);
 }
 
 void framebuffer_draw_cursor(uint32_t x, uint32_t y) {

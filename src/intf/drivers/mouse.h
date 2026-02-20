@@ -15,3 +15,4 @@ void mouse_update();
 void mouse_handle_packet();
 struct MouseState mouse_get_state();
 void mouse_clear_scroll();
+extern volatile int mouse_speed_setting;

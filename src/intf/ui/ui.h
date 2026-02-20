@@ -31,6 +31,7 @@
 
 #define APP_HOME 0
 #define APP_NOTE 1
+#define APP_SETTINGS 2
 
 // Colors
 #define COL_SIDEBAR 0xFFDDDDDD // Light Grey
@@ -38,3 +39,6 @@
 #define COL_TEXT    0xFF000000 // Black
 #define COL_ICON    0xFF000000 // Black
 #define COL_SELECT  0xFFAAAAAA // Darker Grey
+#define COL_ACCENT  0xFF4488CC // Blue accent
+#define COL_TOGGLE_ON  0xFF44AA44 // Green
+#define COL_TOGGLE_OFF 0xFF999999 // Grey

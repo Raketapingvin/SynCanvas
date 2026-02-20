@@ -24,4 +24,4 @@ build-x86_64: $(x86_64_object_files)
 
 .PHONY: run
 run:
-	qemu-system-x86_64 -cdrom dist/x86_64/kernel.iso -device rtl8139 -audiodev pa,id=spk -machine pcspk-audiodev=spk -device piix3-usb-uhci -drive file=disk.img,format=raw,index=0,media=disk
+	qemu-system-x86_64 -cdrom dist/x86_64/kernel.iso -netdev user,id=net0 -device rtl8139,netdev=net0 -audiodev pa,id=spk -machine pcspk-audiodev=spk -device piix3-usb-uhci -drive file=disk.img,format=raw,index=0,media=disk
